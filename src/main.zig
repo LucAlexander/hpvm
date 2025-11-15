@@ -9,7 +9,7 @@ const Config = struct {
 	mem: std.mem.Allocator
 };
 
-const Register = enum {
+const Register = enum(u64) {
 	R0=0,
 	R1,
 	R2,
@@ -70,18 +70,18 @@ const VM = struct {
 
 	pub fn load_bytes(vm: *VM, address: u64, bytes: []u8) bool {
 		var i: u64 = address;
-		for (bytes) |bytes| {
+		for (bytes) |byte| {
 			vm.memory.mem[i] = byte;
 			i += 1;
 		}
 	}
 
 	pub fn interpret(vm: *VM, core: u64, start: u64) bool {
-		vm.cores[core].reg[IP] = start;
-		vm.cores[core].reg[SP] = memory.mem.len;
+		vm.cores[core].reg[.IP] = start;
+		vm.cores[core].reg[.SP] = vm.memory.mem.len;
 		var running = true;
-		var ip = &vm.cores[core].reg[IP];
-		const core = &vm.cores[core];
+		const ip = &vm.cores[core].reg[.IP];
+		const core_ptr = &vm.cores[core];
 		const ops: [84]Operation = .{
 			mov_rr, mov_rl, mov_rdr, 
 			mov_drr, mov_drl, mov_drdr,
@@ -109,7 +109,7 @@ const VM = struct {
 			int
 		};
 		while (running){
-			running = ops[vm.memory.half_words[ip.*]&0xFF](vm, core, ip);
+			running = ops[vm.memory.half_words[ip.*]&0xFF](vm, core_ptr, ip);
 		}
 	}
 };
@@ -198,6 +198,16 @@ pub fn add_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	return true;
 }
 
+pub fn add_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+	const inst = vm.memory.half_words[ip];
+	const dst = (inst & 0x0000FF00) >> 0x8;
+	const left = (inst & 0x00FF0000) >> 0x10;
+	const right = (inst & 0xFF000000) >> 0x18;
+	core.reg[dst] = left + right;
+	ip.* += 1;
+	return true;
+}
+
 pub fn sub_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const dst = (inst & 0x0000FF00) >> 0x8;
@@ -224,6 +234,16 @@ pub fn sub_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
 	core.reg[dst] = left - core.reg[right];
+	ip.* += 1;
+	return true;
+}
+
+pub fn sub_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+	const inst = vm.memory.half_words[ip];
+	const dst = (inst & 0x0000FF00) >> 0x8;
+	const left = (inst & 0x00FF0000) >> 0x10;
+	const right = (inst & 0xFF000000) >> 0x18;
+	core.reg[dst] = left - right;
 	ip.* += 1;
 	return true;
 }
@@ -258,6 +278,16 @@ pub fn mul_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	return true;
 }
 
+pub fn mul_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+	const inst = vm.memory.half_words[ip];
+	const dst = (inst & 0x0000FF00) >> 0x8;
+	const left = (inst & 0x00FF0000) >> 0x10;
+	const right = (inst & 0xFF000000) >> 0x18;
+	core.reg[dst] = left * right;
+	ip.* += 1;
+	return true;
+}
+
 pub fn div_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const dst = (inst & 0x0000FF00) >> 0x8;
@@ -284,6 +314,16 @@ pub fn div_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
 	core.reg[dst] = left / core.reg[right];
+	ip.* += 1;
+	return true;
+}
+
+pub fn div_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+	const inst = vm.memory.half_words[ip];
+	const dst = (inst & 0x0000FF00) >> 0x8;
+	const left = (inst & 0x00FF0000) >> 0x10;
+	const right = (inst & 0xFF000000) >> 0x18;
+	core.reg[dst] = left / right;
 	ip.* += 1;
 	return true;
 }
@@ -318,6 +358,16 @@ pub fn mod_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	return true;
 }
 
+pub fn mod_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+	const inst = vm.memory.half_words[ip];
+	const dst = (inst & 0x0000FF00) >> 0x8;
+	const left = (inst & 0x00FF0000) >> 0x10;
+	const right = (inst & 0xFF000000) >> 0x18;
+	core.reg[dst] = left % right;
+	ip.* += 1;
+	return true;
+}
+
 pub fn uadd_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const dst = (inst & 0x0000FF00) >> 0x8;
@@ -344,6 +394,16 @@ pub fn uadd_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
 	core.reg[dst] = left + core.reg[right];
+	ip.* += 1;
+	return true;
+}
+
+pub fn uadd_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+	const inst = vm.memory.half_words[ip];
+	const dst = (inst & 0x0000FF00) >> 0x8;
+	const left = (inst & 0x00FF0000) >> 0x10;
+	const right = (inst & 0xFF000000) >> 0x18;
+	core.reg[dst] = left + right;
 	ip.* += 1;
 	return true;
 }
@@ -378,6 +438,16 @@ pub fn usub_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	return true;
 }
 
+pub fn usub_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+	const inst = vm.memory.half_words[ip];
+	const dst = (inst & 0x0000FF00) >> 0x8;
+	const left = (inst & 0x00FF0000) >> 0x10;
+	const right = (inst & 0xFF000000) >> 0x18;
+	core.reg[dst] = left - right;
+	ip.* += 1;
+	return true;
+}
+
 pub fn umul_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const dst = (inst & 0x0000FF00) >> 0x8;
@@ -404,6 +474,16 @@ pub fn umul_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
 	core.reg[dst] = left * core.reg[right];
+	ip.* += 1;
+	return true;
+}
+
+pub fn umul_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+	const inst = vm.memory.half_words[ip];
+	const dst = (inst & 0x0000FF00) >> 0x8;
+	const left = (inst & 0x00FF0000) >> 0x10;
+	const right = (inst & 0xFF000000) >> 0x18;
+	core.reg[dst] = left * right;
 	ip.* += 1;
 	return true;
 }
@@ -438,6 +518,16 @@ pub fn udiv_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	return true;
 }
 
+pub fn udiv_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+	const inst = vm.memory.half_words[ip];
+	const dst = (inst & 0x0000FF00) >> 0x8;
+	const left = (inst & 0x00FF0000) >> 0x10;
+	const right = (inst & 0xFF000000) >> 0x18;
+	core.reg[dst] = left / right;
+	ip.* += 1;
+	return true;
+}
+
 pub fn umod_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const dst = (inst & 0x0000FF00) >> 0x8;
@@ -464,6 +554,16 @@ pub fn umod_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
 	core.reg[dst] = left % core.reg[right];
+	ip.* += 1;
+	return true;
+}
+
+pub fn umod_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+	const inst = vm.memory.half_words[ip];
+	const dst = (inst & 0x0000FF00) >> 0x8;
+	const left = (inst & 0x00FF0000) >> 0x10;
+	const right = (inst & 0xFF000000) >> 0x18;
+	core.reg[dst] = left % right;
 	ip.* += 1;
 	return true;
 }
@@ -498,6 +598,16 @@ pub fn shr_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	return true;
 }
 
+pub fn shr_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+	const inst = vm.memory.half_words[ip];
+	const dst = (inst & 0x0000FF00) >> 0x8;
+	const left = (inst & 0x00FF0000) >> 0x10;
+	const right = (inst & 0xFF000000) >> 0x18;
+	core.reg[dst] = left >> right;
+	ip.* += 1;
+	return true;
+}
+
 pub fn shl_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const dst = (inst & 0x0000FF00) >> 0x8;
@@ -524,6 +634,16 @@ pub fn shl_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
 	core.reg[dst] = left << core.reg[right];
+	ip.* += 1;
+	return true;
+}
+
+pub fn shl_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+	const inst = vm.memory.half_words[ip];
+	const dst = (inst & 0x0000FF00) >> 0x8;
+	const left = (inst & 0x00FF0000) >> 0x10;
+	const right = (inst & 0xFF000000) >> 0x18;
+	core.reg[dst] = left << right;
 	ip.* += 1;
 	return true;
 }
@@ -558,6 +678,16 @@ pub fn and_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	return true;
 }
 
+pub fn and_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+	const inst = vm.memory.half_words[ip];
+	const dst = (inst & 0x0000FF00) >> 0x8;
+	const left = (inst & 0x00FF0000) >> 0x10;
+	const right = (inst & 0xFF000000) >> 0x18;
+	core.reg[dst] = left & right;
+	ip.* += 1;
+	return true;
+}
+
 pub fn xor_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const dst = (inst & 0x0000FF00) >> 0x8;
@@ -588,6 +718,16 @@ pub fn xor_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	return true;
 }
 
+pub fn xor_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+	const inst = vm.memory.half_words[ip];
+	const dst = (inst & 0x0000FF00) >> 0x8;
+	const left = (inst & 0x00FF0000) >> 0x10;
+	const right = (inst & 0xFF000000) >> 0x18;
+	core.reg[dst] = left ^ right;
+	ip.* += 1;
+	return true;
+}
+
 pub fn or_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const dst = (inst & 0x0000FF00) >> 0x8;
@@ -614,6 +754,16 @@ pub fn or_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
 	core.reg[dst] = left | core.reg[right];
+	ip.* += 1;
+	return true;
+}
+
+pub fn or_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+	const inst = vm.memory.half_words[ip];
+	const dst = (inst & 0x0000FF00) >> 0x8;
+	const left = (inst & 0x00FF0000) >> 0x10;
+	const right = (inst & 0xFF000000) >> 0x18;
+	core.reg[dst] = left | right;
 	ip.* += 1;
 	return true;
 }
@@ -659,13 +809,13 @@ pub fn cmp_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
 	if (vm.core[left] < vm.core[right]){
-		core.reg[SR] = 1;
+		core.reg[.SR] = 1;
 	}
 	else if (vm.core[left] > vm.core[right]){
-		core.reg[SR] = 2;
+		core.reg[.SR] = 2;
 	}
 	else{
-		core.reg[SR] = 0;
+		core.reg[.SR] = 0;
 	}
 	ip.* += 1;
 	return true;
@@ -676,13 +826,13 @@ pub fn cmp_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
 	if (vm.core[left] < right){
-		core.reg[SR] = 1;
+		core.reg[.SR] = 1;
 	}
 	else if (vm.core[left] > right){
-		core.reg[SR] = 2;
+		core.reg[.SR] = 2;
 	}
 	else{
-		core.reg[SR] = 0;
+		core.reg[.SR] = 0;
 	}
 	ip.* += 1;
 	return true;
@@ -691,15 +841,15 @@ pub fn cmp_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 pub fn jmp(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	core.reg[IP] += off;
+	core.reg[.IP] += off;
 	return true;
 }
 
 pub fn jeq(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	if (core.reg[SR] == 0){
-		ip* += off;
+	if (core.reg[.SR] == 0){
+		ip.* += off;
 		return true;
 	}
 	ip.* += 1;
@@ -709,8 +859,8 @@ pub fn jeq(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 pub fn jne(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	if (core.reg[SR] != 0){
-		ip* += off;
+	if (core.reg[.SR] != 0){
+		ip.* += off;
 		return true;
 	}
 	ip.* += 1;
@@ -720,8 +870,8 @@ pub fn jne(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 pub fn jlt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	if (core.reg[SR] == 1){
-		ip* += off;
+	if (core.reg[.SR] == 1){
+		ip.* += off;
 		return true;
 	}
 	ip.* += 1;
@@ -731,8 +881,8 @@ pub fn jlt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 pub fn jle(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	if (core.reg[SR] < 2){
-		ip* += off;
+	if (core.reg[.SR] < 2){
+		ip.* += off;
 		return true;
 	}
 	ip.* += 1;
@@ -742,8 +892,8 @@ pub fn jle(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 pub fn jgt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	if (core.reg[SR] == 2){
-		ip* += off;
+	if (core.reg[.SR] == 2){
+		ip.* += off;
 		return true;
 	}
 	ip.* += 1;
@@ -753,8 +903,8 @@ pub fn jgt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 pub fn jge(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	if (core.reg[SR] > 1){
-		ip* += off;
+	if (core.reg[.SR] > 1){
+		ip.* += off;
 		return true;
 	}
 	ip.* += 1;
@@ -764,43 +914,43 @@ pub fn jge(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 pub fn call(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	core.reg[SP] -= 8;
-	vm.memory.words[core.reg[SP] >> 3] = core.reg[IP]+1;
-	core.reg[SP] -= 8;
-	vm.memory.words[core.reg[SP] >> 3] = core.reg[FP];
-	core.reg[FP] = core.reg[SP];
-	core.reg[IP] += off;
+	core.reg[.SP] -= 8;
+	vm.memory.words[core.reg[.SP] >> 3] = core.reg[.IP]+1;
+	core.reg[.SP] -= 8;
+	vm.memory.words[core.reg[.SP] >> 3] = core.reg[.FP];
+	core.reg[.FP] = core.reg[.SP];
+	core.reg[.IP] += off;
 	return true;
 }
 
 pub fn ret_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const reg = (inst & 0xFF00) >> 0x8;
-	core.reg[SP] = core.reg[FP];
-	core.reg[FP] = vm.memory.words[core.reg[SP] >> 3];
-	core.reg[SP] += 8;
-	core.reg[IP] = vm.memory.words[core.reg[SP] >> 3];
-	vm.memory.words[core.reg[SP] >> 3] = core.reg[reg];
+	core.reg[.SP] = core.reg[.FP];
+	core.reg[.FP] = vm.memory.words[core.reg[.SP] >> 3];
+	core.reg[.SP] += 8;
+	core.reg[.IP] = vm.memory.words[core.reg[.SP] >> 3];
+	vm.memory.words[core.reg[.SP] >> 3] = core.reg[reg];
 	return true;
 }
 
 pub fn ret_l(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const lit = (inst & 0xFF00) >> 0x8;
-	core.reg[SP] = core.reg[FP];
-	core.reg[FP] = vm.memory.words[core.reg[SP] >> 3];
-	core.reg[SP] += 8;
-	core.reg[IP] = vm.memory.words[core.reg[SP] >> 3];
-	vm.memory.words[core.reg[SP] >> 3] = lit;
+	core.reg[.SP] = core.reg[.FP];
+	core.reg[.FP] = vm.memory.words[core.reg[.SP] >> 3];
+	core.reg[.SP] += 8;
+	core.reg[.IP] = vm.memory.words[core.reg[.SP] >> 3];
+	vm.memory.words[core.reg[.SP] >> 3] = lit;
 	return true;
 }
 
 pub fn psh_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const reg = (inst & 0xFF00) >> 0x8;
-	core.reg[SP] = core.reg[FP];
-	core.reg[SP] -= 8;
-	vm.memory.words[core.reg[SP] >> 3] = core.reg[reg];
+	core.reg[.SP] = core.reg[.FP];
+	core.reg[.SP] -= 8;
+	vm.memory.words[core.reg[.SP] >> 3] = core.reg[reg];
 	ip.* += 1;
 	return true;
 }
@@ -808,14 +958,14 @@ pub fn psh_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 pub fn pop_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip];
 	const reg = (inst & 0xFF00) >> 0x8;
-	core.reg[SP] = core.reg[FP];
-	core.reg[reg] = vm.memory.words[core.reg[SP] >> 3];
-	core.reg[SP] += 8;
+	core.reg[.SP] = core.reg[.FP];
+	core.reg[reg] = vm.memory.words[core.reg[.SP] >> 3];
+	core.reg[.SP] += 8;
 	ip.* += 1;
 	return true;
 }
 
-pub fn int(vm: *VM, core: *Core, ip: *align(1) u64) bool {
+pub fn int(_: *VM, _: *Core, _: *align(1) u64) bool {
 	//TODO
 }
 
