@@ -68,7 +68,7 @@ const VM = struct {
 		return vm;
 	}
 
-	pub fn load_bytes(vm: *VM, address: u64, bytes: []u8) bool {
+	pub fn load_bytes(vm: *VM, address: u64, bytes: []u8) void {
 		var i: u64 = address;
 		for (bytes) |byte| {
 			vm.memory.mem[i] = byte;
@@ -1010,7 +1010,6 @@ const Instruction = struct {
 			src: ALUArg
 		},
 		jump: u16,
-		label: []u8,
 		compare: struct {
 			left: Register,
 			right: ALUArg
@@ -1041,9 +1040,6 @@ const TOKEN = enum {
 	CLOSE,
 	REG0, REG1, REG2, REG3,
 	REG_FP, REG_SP,
-	IDEN,
-	DOT,
-	COL
 };
 
 const Token = struct {
@@ -1138,24 +1134,6 @@ pub fn tokenize(text: []u8, err: *Buffer(Error)) ParseError!Buffer(Token) {
 			i += 1;
 			continue;
 		}
-		else if (c == '.'){
-			tokens.append(Token{
-				.tag = .DOT,
-				.pos = i,
-				.text=text[i..i+1]
-			}) catch unreachable;
-			i += 1;
-			continue;
-		}
-		else if (c == ':'){
-			tokens.append(Token{
-				.tag = .COL,
-				.pos = i,
-				.text=text[i..i+1]
-			}) catch unreachable;
-			i += 1;
-			continue;
-		}
 		var start = i;
 		if (std.ascii.isAlphanumeric(c)){
 			while (std.ascii.isAlphanumeric(c)) {
@@ -1173,13 +1151,9 @@ pub fn tokenize(text: []u8, err: *Buffer(Error)) ParseError!Buffer(Token) {
 				}) catch unreachable;
 				continue;
 			}
-			const value = std.fmt.parseInt(u16, text[start .. i], 16) catch {
-				tokens.append(Token{
-					.tag = .IDEN,
-					.text=text[start..i],
-					.pos = i
-				}) catch unreachable;
-				continue;
+			const value = std.fmt.parseInt(i32, text[start .. i], 16) catch {
+				set_error(mem, err, i, "Unexpected symbol in text stream where numeric was expected: {s}\n", .{text[start..i]});
+				return ParseError.UnexpectedToken;
 			}
 			tokens.append(Token{
 				.tag = .NUM,
@@ -1224,7 +1198,7 @@ pub fn parse_rarg(mem: *const std.mem.Allocator, tokens: []Token, i:*u64,  err: 
 		try assert_infile(mem, tokens, i, err);
 		const num = tokens[i.*];
 		i.* += 1;
-		const val = std.fmt.parseInt(u16, num.text, 16) catch unreachable;
+		const val = std.fmt.parseInt(i32, num.text, 16) catch unreachable;
 		return RArg{
 			.literal = val
 		};
@@ -1236,47 +1210,13 @@ pub fn parse_rarg(mem: *const std.mem.Allocator, tokens: []Token, i:*u64,  err: 
 	};
 }
 
-const Link = union(enum) {
-	pending: struct {
-		loc: u64,
-		next: ?*Link
-	},
-	fulfilled: u64
-};
-
 pub fn parse(mem: *const std.mem.Allocator, tokens: []Token, err: *Buffer(Error)) ParseError!Buffer(Instruction) {
 	var i: u64 = 0;
 	var instructions = Buffer(Instruction).init(mem.*);
-	const default_header = mem.alloc(u8, 0) catch unreachable;
-	var label_header = default_header;
 	while (i < tokens.len){
 		const tok = tokens[i];
 		i += 1;
 		switch (tok.tag){
-			.IDEN => {
-				instructions.append(Instruction{
-					.label = tok.text
-				}) catch unreachable;
-				label_header = tok.text;
-			},
-			.DOT => {
-				try assert_infile(mem, tokens, &i, err);
-				const label = tokens[i];
-				if (label.tag != .IDEN){
-					set_error(mem, err, i, "Expected identifier for sublabel, found {s}\n", .{label.text});
-				}
-				i += 1;
-				const sub = mem.alloc(u8, label_header.len + tok.text.len) catch unreachable;
-				for (0..label_header.len) |k| {
-					sub[k] = label_header[k];
-				}
-				for (0..tok.text.len) |k| {
-					sub[k+label_header.len] = tok.text[k];
-				}
-				instructions.append(Instruction{
-					.label = sub
-				}) catch unreachable;
-			},
 			.MOV => {
 				try assert_infile(mem, tokens, &i, err);
 				const open = tokens[i];
@@ -1357,18 +1297,56 @@ pub fn parse(mem: *const std.mem.Allocator, tokens: []Token, err: *Buffer(Error)
 						}
 					}
 				}) catch unreachable;
-
 			},
 			.JMP, .JNE, .JEQ, .JLT, .JGT, .JLE, .JGE => {
-				
+				i += 1;
+				try assert_infile(mem, tokens, &i, err);
+				const num = tokens[i];
+				i += 1;
+				const val = std.fmt.parseInt(i32, num.text, 16) catch unreachable;
+				instructions.append(Instruction{
+					.jump=val
+				}) catch unreachable;
 			},
-			.PSH => {},
-			.POP => {},
-			.CALL => {},
-			.RET => {},
-			.INT => {}
+			.PSH => {
+				const reg = try parse_register(mem, tokens, &i, err);
+				instructions.append(Instruction{
+					.push = reg
+				}) catch unreachable;
+			},
+			.POP => {
+				const reg = try parse_register(mem, tokens, &i, err);
+				instructions.append(Instruction{
+					.pop = reg
+				}) catch unreachable;
+			},
+			.CALL => {
+				i += 1;
+				try assert_infile(mem, tokens, &i, err);
+				const num = tokens[i];
+				i += 1;
+				const val = std.fmt.parseInt(i32, num.text, 16) catch unreachable;
+				instructions.append(Instruction{
+					.call=val
+				}) catch unreachable;
+			},
+			.RET => {
+				const arg = try parse_alu_arg(mem, tokens, &i, err);
+				instructions.append(Instruction{
+					.ret = arg
+				}) catch unreachable;
+			},
+			.INT => {
+				instructions.append(Instruction{
+					.interrupt = .{}
+				}) catch unreachable;
+			}
 		}
 	}
+}
+
+pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: Buffer(Instruction)) ParseError![]u8 {
+	
 }
 
 pub fn parse_alu_arg(mem: *const std.mem.Allocator, tokens: Buffer(Token), i: *u64, err: *Buffer(Error)) ParseError!ALUArg{
@@ -1379,7 +1357,7 @@ pub fn parse_alu_arg(mem: *const std.mem.Allocator, tokens: Buffer(Token), i: *u
 		try assert_infile(mem, tokens, i, err);
 		const num = tokens[i.*];
 		i.* += 1;
-		const val = std.fmt.parseInt(u64, num.text, 16);
+		const val = std.fmt.parseInt(i32, num.text, 16);
 		return ALUArg{
 			.literal = val
 		};
@@ -1420,6 +1398,66 @@ pub fn parse_register(mem: *const std.mem.Allocator, tokens: Buffer(Token), i: *
 	}
 }
 
+pub fn show_error(text: []u8, err: Error) void {
+	var i: u64 = 0;
+	var dist:u64 = 32;
+	if (err.pos < dist){
+		dist = err.pos;
+	}
+	var start_pos:u64 = 0;
+	var end_pos:u64 = text.len;
+	var found_start = false;
+	var line:u64 = 1;
+	var start_line:u64 = 1;
+	while (i < text.len){
+		if (text[i] == '\n'){
+			line += 1;
+		}
+		if (i>err.pos-dist and !found_start){
+			if (text[i] == '\n'){
+				start_pos = i+1;
+				found_start = true;
+				start_line = line;
+			}
+		}
+		if (i > err.pos+dist){
+			if (text[i] == '\n'){
+				end_pos = i;
+				break;
+			}
+		}
+		i += 1;
+	}
+	line = start_line;
+	const stderr = std.io.getStdErr().writer();
+	stderr.print("\x1b[1m{s}\x1b[0m\n", .{err.message})
+		catch unreachable;
+	stderr.print("{d:06} | ", .{line})
+		catch unreachable;
+	if (start_pos  >= end_pos){
+		start_pos = end_pos;
+	}
+	for (start_pos .. end_pos) |k| {
+		if (text[k] == '\n'){
+			line += 1;
+			stderr.print("\n{d:06} | ", .{line})
+				catch unreachable;
+			continue;
+		}
+		if (k == err.pos){
+			stderr.print("\x1b[1;4;31m", .{})
+				catch unreachable;
+		}
+		std.debug.print("{c}", .{text[k]});
+		if (k == err.pos){
+			stderr.print("\x1b[0m", .{})
+				catch unreachable;
+		}
+	}
+	stderr.print("\n", .{})
+		catch unreachable;
+}
+
 pub fn main() !void {
 	const allocator = std.heap.page_allocator;
 	const default_config = Config {
@@ -1429,8 +1467,41 @@ pub fn main() !void {
 		.mem_size = 0x100000,
 		.mem = allocator
 	};
-	_ = VM.init(default_config);
+	const vm = VM.init(default_config);
+	var infile = std.fs.cwd().openFile("test.bit") catch {
+		std.debug.print("File not founhd {s}\n", .{"test.bit"});
+		return;
+	};
+	defer infile.close();
+	const stat = infile.stat() catch {
+		std.debug.print("Errored file stat: {s}\n", .{"test.bit"});
+		return;
+	};
+	const contents = infile.readToEndAlloc(allocator, stat.size+1) catch {
+		std.debug.print("Error reading file: {s}\n", .{"test.bit"});
+		return;
+	};
+	defer allocator.free(contents);
+	const err = Buffer(Error).init(allocator);
+	const tokens = tokenize(&allocator, contents, &err) catch {
+		for (err.items) |e| {
+			show_error(contents, e);
+		}
+	};
+	const instructions = parse(&allocator, tokens, &err) catch {
+		for (err.items) |e| {
+			show_error(contents, e);
+		}
+	}
+	const bytecode = assemble_bytecode(&allocat or, instructions, &err) catch {
+		for (err.items) |e| {
+			show_error(contents, e);
+		}
+	};
+	vm.load_bytes(0, bytecode);
 }
+
+
 //TODO CLI
 //TODO parser
 //TODO assembler
