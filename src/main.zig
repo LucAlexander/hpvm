@@ -965,8 +965,459 @@ pub fn pop_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	return true;
 }
 
-pub fn int(_: *VM, _: *Core, _: *align(1) u64) bool {
-	//TODO
+pub fn int(_: *VM, core: *Core, _: *align(1) u64) bool {
+	if (core.reg[.R0] == 0){
+		return false;
+	}
+	return true;
+}
+
+const ParseError = error {
+	UnexpectedToken,
+	UnexpectedEOF
+};
+
+const LArg = union(enum) {
+	register: Register,
+	dregister: Register,
+};
+
+const RArg = union(enum) {
+	register: Register,
+	dregister: Register,
+	literal: u16
+};
+
+const ALUArg = union(enum) {
+	register: Register,
+	literal: u8
+};
+
+const Instruction = struct {
+	tag: TOKEN,
+	data: union(enum) {
+		move: struct {
+			dest: LArg,
+			src: RArg
+		},
+		alu_bin: struct {
+			dest: Register,
+			left: ALUArg,
+			right: ALUArg
+		},
+		alu_un: struct {
+			dest: Register,
+			src: ALUArg
+		},
+		jump: u16,
+		label: []u8,
+		compare: struct {
+			left: Register,
+			right: ALUArg
+		},
+		call: u16,
+		ret: ALUArg,
+		push: Register,
+		pop: Register,
+		interrupt
+	}
+};
+
+const TOKEN = enum {
+	MOV,
+	ADD, SUB, MUL, DIV, MOD,
+	UADD, USUB, UMUL, UDIV, UMOD,
+	SHR, SHL,
+	AND, OR, XOR,
+	NOT, COM,
+	CMP,
+	JMP, JEQ, JNE, JGT, JGE, JLT, JLE,
+	CALL, RET,
+	PSH, POP,
+	INT,
+	NUM,
+	LIT,
+	OPEN,
+	CLOSE,
+	REG0, REG1, REG2, REG3,
+	REG_FP, REG_SP,
+	IDEN,
+	DOT,
+	COL
+};
+
+const Token = struct {
+	text: []u8,
+	pos: u64
+	tag: TOKEN,
+};
+
+const Error = struct {
+	message: []u8,
+	pos: u64
+};
+
+pub fn set_error(mem: *const std.mem.Allocator, buffer: *Buffer(Error), index: u64, comptime fmt: []const u8, args: anytype) void {
+	var error = Error{
+		.pos = index,
+		.message = mem.alloc(u8, 128) catch unreachable
+	};
+	const result = std.fmt.bufPrint(err.message, fmt, args);
+	err.message.len = result.len;
+	buffer.append(err)
+		catch unreachable;
+}
+
+pub fn tokenize(text: []u8, err: *Buffer(Error)) ParseError!Buffer(Token) {
+	const keywords = StringHashMap(TOKEN);
+	keywords.put("mov", MOV) catch unreachable;
+	keywords.put("add", ADD) catch unreachable;
+	keywords.put("sub", SUB) catch unreachable;
+	keywords.put("mul", MUL) catch unreachable;
+	keywords.put("div", DIV) catch unreachable;
+	keywords.put("mod", MOD) catch unreachable;
+	keywords.put("uadd", UADD) catch unreachable;
+	keywords.put("usub", USUB) catch unreachable;
+	keywords.put("umul", UMUL) catch unreachable;
+	keywords.put("udiv", UDIV) catch unreachable;
+	keywords.put("umod", UMOD) catch unreachable;
+	keywords.put("shr", SHR) catch unreachable;
+	keywords.put("shl", SHL) catch unreachable;
+	keywords.put("and", AND) catch unreachable;
+	keywords.put("or", OR) catch unreachable;
+	keywords.put("xor", XOR) catch unreachable;
+	keywords.put("not", NOT) catch unreachable;
+	keywords.put("com", COM) catch unreachable;
+	keywords.put("cmp", CMP) catch unreachable;
+	keywords.put("jmp", JMP) catch unreachable;
+	keywords.put("jeq", JEQ) catch unreachable;
+	keywords.put("jne", JNE) catch unreachable;
+	keywords.put("jgt", JGT) catch unreachable;
+	keywords.put("jlt", JLT) catch unreachable;
+	keywords.put("jge", JGE) catch unreachable;
+	keywords.put("jle", JLE) catch unreachable;
+	keywords.put("psh", PSH) catch unreachable;
+	keywords.put("pop", POP) catch unreachable;
+	keywords.put("call", CALL) catch unreachable;
+	keywords.put("ret", RET) catch unreachable;
+	keywords.put("int", INT) catch unreachable;
+	keywords.put("r0", REG0) catch unreachable;
+	keywords.put("r1", REG1) catch unreachable;
+	keywords.put("r2", REG2) catch unreachable;
+	keywords.put("r3", REG3) catch unreachable;
+	keywords.put("fp", REG_FP) catch unreachable;
+	keywords.put("sp", REG_SP) catch unreachable;
+	var i: u64 = 0;
+	var tokens = Buffer(Token).init(mem.*);
+	outer: while (i < text.len){
+		var c = text[i];
+		if (c == '!'){
+			tokens.append(Token{
+				.tag=.LIT,
+				.pos = i,
+				.text=text[i..i+1]
+			}) catch unreachable;
+			i += 1;
+			continue;
+		}
+		else if (c == '['){
+			tokens.append(Token{
+				.tag = .OPEN,
+				.pos = i,
+				.text=text[i..i+1]
+			}) catch unreachable;
+			i += 1;
+			continue;
+		}
+		else if (c == ']'){
+			tokens.append(Token{
+				.tag = .CLOSE,
+				.pos = i,
+				.text=text[i..i+1]
+			}) catch unreachable;
+			i += 1;
+			continue;
+		}
+		else if (c == '.'){
+			tokens.append(Token{
+				.tag = .DOT,
+				.pos = i,
+				.text=text[i..i+1]
+			}) catch unreachable;
+			i += 1;
+			continue;
+		}
+		else if (c == ':'){
+			tokens.append(Token{
+				.tag = .COL,
+				.pos = i,
+				.text=text[i..i+1]
+			}) catch unreachable;
+			i += 1;
+			continue;
+		}
+		var start = i;
+		if (std.ascii.isAlphanumeric(c)){
+			while (std.ascii.isAlphanumeric(c)) {
+				i += 1;
+				if (i >= text.len){
+					break outer;
+				}
+				c = text[i];
+			}
+			if (keywords.get(text[start..i])) |realtag| {
+				tokens.append(Token{
+					.tag = realtag,
+					.text=text[start .. i],
+					.pos = i
+				}) catch unreachable;
+				continue;
+			}
+			const value = std.fmt.parseInt(u16, text[start .. i], 16) catch {
+				tokens.append(Token{
+					.tag = .IDEN,
+					.text=text[start..i],
+					.pos = i
+				}) catch unreachable;
+				continue;
+			}
+			tokens.append(Token{
+				.tag = .NUM,
+				.text=text[start .. i],
+				.pos = i
+			}) catch unreachable;
+			continue;
+		}
+		set_error(mem, err, i, "Unexpected symbol in text stream: {}\n", .{c});
+		return ParseError.UnexpectedToken;
+	}
+	return tokens;
+}
+
+pub fn assert_infile(mem: *const std.mem.Allocator, tokens: []Token, i: *u64, err: *Buffer(Error)) ParseError!void {
+	if (i.* >= tokens.len){
+		set_error(mem, err, i.*, "Unexpected end of file in register dereference\n", .{});
+		return ParseError.UnexpectedEOF;
+	}
+}
+
+pub fn parse_rarg(mem: *const std.mem.Allocator, tokens: []Token, i:*u64,  err: *Buffer(Error)) ParseError!RArg {
+	try assert_infile(mem, tokens, &i, err);
+	const ropen = tokens[i.*];
+	if (ropen.tag == .OPEN){
+		i.* += 1;
+		const dreg = try parse_register(mem, tokens, i, err);
+		try assert_infile(mem, tokens, i, err);
+		const close = tokens[i.*];
+		i.* += 1;
+		if (close.tag != .CLOSE){
+			set_error(mem, err, i.*, "Expected ] to close dereference, found {s}\n", .{close.text});
+			return ParseError.UnexpectedToken;
+		}
+		return RArg{
+			.dregister = dreg 
+		};
+		continue;
+	}
+	else if (ropen.tag == .LIT){
+		i.* += 1;
+		try assert_infile(mem, tokens, i, err);
+		const num = tokens[i.*];
+		i.* += 1;
+		const val = std.fmt.parseInt(u16, num.text, 16) catch unreachable;
+		return RArg{
+			.literal = val
+		};
+		continue;
+	}
+	const rreg = try parse_register(mem, tokens, i, err);
+	return RArg{
+		.register=rreg
+	};
+}
+
+const Link = union(enum) {
+	pending: struct {
+		loc: u64,
+		next: ?*Link
+	},
+	fulfilled: u64
+};
+
+pub fn parse(mem: *const std.mem.Allocator, tokens: []Token, err: *Buffer(Error)) ParseError!Buffer(Instruction) {
+	var i: u64 = 0;
+	var instructions = Buffer(Instruction).init(mem.*);
+	const default_header = mem.alloc(u8, 0) catch unreachable;
+	var label_header = default_header;
+	while (i < tokens.len){
+		const tok = tokens[i];
+		i += 1;
+		switch (tok.tag){
+			.IDEN => {
+				instructions.append(Instruction{
+					.label = tok.text
+				}) catch unreachable;
+				label_header = tok.text;
+			},
+			.DOT => {
+				try assert_infile(mem, tokens, &i, err);
+				const label = tokens[i];
+				if (label.tag != .IDEN){
+					set_error(mem, err, i, "Expected identifier for sublabel, found {s}\n", .{label.text});
+				}
+				i += 1;
+				const sub = mem.alloc(u8, label_header.len + tok.text.len) catch unreachable;
+				for (0..label_header.len) |k| {
+					sub[k] = label_header[k];
+				}
+				for (0..tok.text.len) |k| {
+					sub[k+label_header.len] = tok.text[k];
+				}
+				instructions.append(Instruction{
+					.label = sub
+				}) catch unreachable;
+			},
+			.MOV => {
+				try assert_infile(mem, tokens, &i, err);
+				const open = tokens[i];
+				if (open.tag == .OPEN){
+					i += 1;
+					const dreg = try parse_register(mem, tokens, &i, err);
+					try assert_infile(mem, tokens, &i, err);
+					const close = tokens[i];
+					i += 1;
+					if (close.tag != .CLOSE){
+						set_error(mem, err, i, "Expected ] to close dereference, found {s}\n", .{close.text});
+						return ParseError.UnexpectedToken;
+					}
+					instructions.append(Instruction{
+						.tag=tok.tag,
+						.data=.{
+							.move = .{
+								.dest=LArg{
+									.dregister=dreg
+								},
+								.src = try parse_rarg(mem, tokens, &i, err)
+							}
+						}
+					}) catch unreachable;			
+				}
+				const reg = try parse_register(mem, tokens, &i, err);
+				instructions.append(Instruction{
+					.tag=tok.tag,
+					.data=.{
+						.move = .{
+							.dest=LArg{
+								.register=reg
+							},
+							.src = try parse_rarg(mem, tokens, &i, err)
+						}
+					}
+				}) catch unreachable;
+			},
+			.ADD, .SUB, .MUL, .DIV, .MOD,
+			.UADD, .USUB, .UMUL, .UDIV, .UMOD,
+		  	.SHR, .SHL, .AND, .OR, .XOR  => {
+				const dest = try parse_register(mem, tokens, &i, err);
+				const left = try parse_alu_arg(mem, tokens, &i, err);
+				const right = try parse_alu_arg(mem, tokens, &i, err);
+				instructions.append(Instruction{
+					.tag=tok.tag,
+					.data = .{
+						.alu_bin = .{
+							.dest = dest,
+							.left = left,
+							.right = right
+						}
+					}
+				}) catch unreachable;
+			},
+			.NOT, .COM => {
+				const dest = try parse_register(mem, tokens, &i, err);
+				const src = try parse_alu_arg(mem, tokens, &i, err);
+				instructions.append(Instruction{
+					.tag=tok.tag,
+					.data = .{
+						.alu_un = .{
+							.dest = dest,
+							.src = src
+						}
+					}
+				}) catch unreachable;
+			},
+			.CMP => {
+				const left = try parse_register(mem, tokens, &i, err);
+				const right = try parse_alu_arg(mem, tokens, &i, err);
+				instructions.append(Instruction{
+					.tag=tok.tag,
+					.data = .{
+						.compare = .{
+							.left = left,
+							.right = right
+						}
+					}
+				}) catch unreachable;
+
+			},
+			.JMP, .JNE, .JEQ, .JLT, .JGT, .JLE, .JGE => {
+				
+			},
+			.PSH => {},
+			.POP => {},
+			.CALL => {},
+			.RET => {},
+			.INT => {}
+		}
+	}
+}
+
+pub fn parse_alu_arg(mem: *const std.mem.Allocator, tokens: Buffer(Token), i: *u64, err: *Buffer(Error)) ParseError!ALUArg{
+	try assert_infile(mem, tokens, i, err);
+	const token = tokens[i.*];
+	if (token.tag == .LIT){
+		i.* += 1;
+		try assert_infile(mem, tokens, i, err);
+		const num = tokens[i.*];
+		i.* += 1;
+		const val = std.fmt.parseInt(u64, num.text, 16);
+		return ALUArg{
+			.literal = val
+		};
+	}
+	const reg = try parse_register(mem, tokens, i, err);
+	return ALUArg{
+		.register = reg
+	};
+}
+
+pub fn parse_register(mem: *const std.mem.Allocator, tokens: Buffer(Token), i: *u64, err: *Buffer(Error)) ParseError!Register {
+	try assert_infile(mem, tokens, i, err);
+	const r = tokens[i.*];
+	i.* += 1;
+	switch (r.tag){
+		.REG0 => {
+			return .R0;
+		},
+		.REG1 => {
+			return .R1;
+		},
+		.REG2 => {
+			return .R2;
+		},
+		.REG3 => {
+			return .R3;
+		},
+		.REG_FP => {
+			return .FP;
+		},
+		.REG_SP => {
+			return .SP;
+		},
+		else => {
+			set_error(mem, err, i.*, "Expected register, found {s}\n", .{t.text});
+			return ParseError.UnexpectedToken;
+		}
+	}
 }
 
 pub fn main() !void {
@@ -980,5 +1431,10 @@ pub fn main() !void {
 	};
 	_ = VM.init(default_config);
 }
+//TODO CLI
+//TODO parser
+//TODO assembler
+//TODO decoder
+//TODO debugger
 //TODO distinction between signed and unsigned math
 //TODO make offset jumps signed
