@@ -20,6 +20,15 @@ const Register = enum(u64) {
 	FP
 };
 
+const r0 = 0;
+const r1 = 1;
+const r2 = 2;
+const r3 = 3;
+const rip = 4;
+const rsr = 5;
+const rsp = 6;
+const rfp = 7;
+
 const Core = struct {
 	reg: [8]u64,
 
@@ -76,13 +85,13 @@ const VM = struct {
 		}
 	}
 
-	pub fn interpret(vm: *VM, core: u64, start: u64) bool {
-		vm.cores[core].reg[.IP] = start;
-		vm.cores[core].reg[.SP] = vm.memory.mem.len;
+	pub fn interpret(vm: *VM, core: u64, start: u64) void {
+		vm.cores[core].reg[rip] = start;
+		vm.cores[core].reg[rsp] = vm.memory.mem.len;
 		var running = true;
-		const ip = &vm.cores[core].reg[.IP];
+		const ip = &vm.cores[core].reg[rip];
 		const core_ptr = &vm.cores[core];
-		const ops: [84]Operation = .{
+		const ops: [85]Operation = .{
 			mov_rr, mov_rl, mov_rdr, 
 			mov_drr, mov_drl, mov_drdr,
 			add_rrr, add_rrl, add_rlr, add_rll,
@@ -115,7 +124,7 @@ const VM = struct {
 };
 
 pub fn mov_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
 	core.reg[dst] = core.reg[src];
@@ -124,7 +133,7 @@ pub fn mov_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mov_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const reg = (inst & 0xFF00) >> 0x8;
 	const lit = (inst & 0xFFFF0000) >> 0x10;
 	core.reg[reg] = lit;
@@ -133,7 +142,7 @@ pub fn mov_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mov_rdr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
 	core.reg[dst] = vm.memory.words[core.reg[src]];
@@ -142,7 +151,7 @@ pub fn mov_rdr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mov_drr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
 	vm.memory.words[core.reg[dst]] = core.reg[src];
@@ -151,7 +160,7 @@ pub fn mov_drr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mov_drl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const reg = (inst & 0xFF00) >> 0x8;
 	const lit = (inst & 0xFFFF0000) >> 0x10;
 	vm.memory.words[core.reg[reg]] = lit;
@@ -160,7 +169,7 @@ pub fn mov_drl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mov_drdr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
 	vm.memory.words[core.reg[dst]] = vm.memory.words[core.reg[src]];
@@ -169,7 +178,7 @@ pub fn mov_drdr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn add_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -179,7 +188,7 @@ pub fn add_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn add_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -189,7 +198,7 @@ pub fn add_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn add_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -199,7 +208,7 @@ pub fn add_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn add_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -209,7 +218,7 @@ pub fn add_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn sub_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -219,7 +228,7 @@ pub fn sub_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn sub_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -229,7 +238,7 @@ pub fn sub_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn sub_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -239,7 +248,7 @@ pub fn sub_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn sub_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -249,7 +258,7 @@ pub fn sub_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mul_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -259,7 +268,7 @@ pub fn mul_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mul_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -269,7 +278,7 @@ pub fn mul_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mul_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -279,7 +288,7 @@ pub fn mul_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mul_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -289,7 +298,7 @@ pub fn mul_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn div_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -299,7 +308,7 @@ pub fn div_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn div_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -309,7 +318,7 @@ pub fn div_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn div_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -319,7 +328,7 @@ pub fn div_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn div_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -329,7 +338,7 @@ pub fn div_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mod_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -339,7 +348,7 @@ pub fn mod_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mod_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -349,7 +358,7 @@ pub fn mod_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mod_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -359,7 +368,7 @@ pub fn mod_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mod_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -369,7 +378,7 @@ pub fn mod_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn uadd_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -379,7 +388,7 @@ pub fn uadd_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn uadd_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -389,7 +398,7 @@ pub fn uadd_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn uadd_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -399,7 +408,7 @@ pub fn uadd_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn uadd_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -409,7 +418,7 @@ pub fn uadd_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn usub_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -419,7 +428,7 @@ pub fn usub_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn usub_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -429,7 +438,7 @@ pub fn usub_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn usub_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -439,7 +448,7 @@ pub fn usub_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn usub_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -449,7 +458,7 @@ pub fn usub_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umul_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -459,7 +468,7 @@ pub fn umul_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umul_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -469,7 +478,7 @@ pub fn umul_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umul_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -479,7 +488,7 @@ pub fn umul_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umul_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -489,7 +498,7 @@ pub fn umul_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn udiv_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -499,7 +508,7 @@ pub fn udiv_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn udiv_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -509,7 +518,7 @@ pub fn udiv_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn udiv_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -519,7 +528,7 @@ pub fn udiv_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn udiv_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -529,7 +538,7 @@ pub fn udiv_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umod_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -539,7 +548,7 @@ pub fn umod_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umod_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -549,7 +558,7 @@ pub fn umod_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umod_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -559,7 +568,7 @@ pub fn umod_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umod_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -569,87 +578,87 @@ pub fn umod_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn shr_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = core.reg[left] >> core.reg[right];
+	core.reg[dst] = core.reg[left] >> @truncate(core.reg[right]);
 	ip.* += 1;
 	return true;
 }
 
 pub fn shr_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = core.reg[left] >> right;
+	core.reg[dst] = core.reg[left] >> @truncate(right);
 	ip.* += 1;
 	return true;
 }
 
 pub fn shr_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = left >> core.reg[right];
+	core.reg[dst] = left >> @truncate(core.reg[right]);
 	ip.* += 1;
 	return true;
 }
 
 pub fn shr_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = left >> right;
+	core.reg[dst] = left >> @truncate(right);
 	ip.* += 1;
 	return true;
 }
 
 pub fn shl_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = core.reg[left] << core.reg[right];
+	core.reg[dst] = core.reg[left] << @truncate(core.reg[right]);
 	ip.* += 1;
 	return true;
 }
 
 pub fn shl_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = core.reg[left] << right;
+	core.reg[dst] = core.reg[left] << @truncate(right);
 	ip.* += 1;
 	return true;
 }
 
 pub fn shl_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = left << core.reg[right];
+	core.reg[dst] = left << @truncate(core.reg[right]);
 	ip.* += 1;
 	return true;
 }
 
 pub fn shl_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = left << right;
+	core.reg[dst] = left << @truncate(right);
 	ip.* += 1;
 	return true;
 }
 
 pub fn and_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -659,7 +668,7 @@ pub fn and_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn and_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -669,7 +678,7 @@ pub fn and_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn and_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -679,7 +688,7 @@ pub fn and_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn and_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -689,7 +698,7 @@ pub fn and_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn xor_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -699,7 +708,7 @@ pub fn xor_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn xor_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -709,7 +718,7 @@ pub fn xor_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn xor_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -719,7 +728,7 @@ pub fn xor_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn xor_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -729,7 +738,7 @@ pub fn xor_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn or_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -739,7 +748,7 @@ pub fn or_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn or_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -749,7 +758,7 @@ pub fn or_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn or_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -759,7 +768,7 @@ pub fn or_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn or_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -769,25 +778,35 @@ pub fn or_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn not_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = !core.reg[src];
+	if (core.reg[src] == 0){
+		core.reg[dst] = 1;
+	}
+	else{
+		core.reg[dst] = 0;
+	}
 	ip.* += 1;
 	return true;
 }
 
 pub fn not_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = !src;
+	if (src == 0){
+		core.reg[dst] = 1;
+	}
+	else{
+		core.reg[dst] = 0;
+	}
 	ip.* += 1;
 	return true;
 }
 
 pub fn com_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
 	core.reg[dst] = ~core.reg[src];
@@ -796,7 +815,7 @@ pub fn com_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn com_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
 	core.reg[dst] = ~src;
@@ -805,50 +824,50 @@ pub fn com_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn cmp_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	if (vm.core[left] < vm.core[right]){
-		core.reg[.SR] = 1;
+	if (core.reg[left] < core.reg[right]){
+		core.reg[rsr] = 1;
 	}
-	else if (vm.core[left] > vm.core[right]){
-		core.reg[.SR] = 2;
+	else if (core.reg[left] > core.reg[right]){
+		core.reg[rsr] = 2;
 	}
 	else{
-		core.reg[.SR] = 0;
+		core.reg[rsr] = 0;
 	}
 	ip.* += 1;
 	return true;
 }
 
 pub fn cmp_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	if (vm.core[left] < right){
-		core.reg[.SR] = 1;
+	if (core.reg[left] < right){
+		core.reg[rsr] = 1;
 	}
-	else if (vm.core[left] > right){
-		core.reg[.SR] = 2;
+	else if (core.reg[left] > right){
+		core.reg[rsr] = 2;
 	}
 	else{
-		core.reg[.SR] = 0;
+		core.reg[rsr] = 0;
 	}
 	ip.* += 1;
 	return true;
 }
 
 pub fn jmp(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	core.reg[.IP] += off;
+	core.reg[rip] += off;
 	return true;
 }
 
 pub fn jeq(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	if (core.reg[.SR] == 0){
+	if (core.reg[rsr] == 0){
 		ip.* += off;
 		return true;
 	}
@@ -857,9 +876,9 @@ pub fn jeq(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn jne(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	if (core.reg[.SR] != 0){
+	if (core.reg[rsr] != 0){
 		ip.* += off;
 		return true;
 	}
@@ -868,9 +887,9 @@ pub fn jne(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn jlt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	if (core.reg[.SR] == 1){
+	if (core.reg[rsr] == 1){
 		ip.* += off;
 		return true;
 	}
@@ -879,9 +898,9 @@ pub fn jlt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn jle(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	if (core.reg[.SR] < 2){
+	if (core.reg[rsr] < 2){
 		ip.* += off;
 		return true;
 	}
@@ -890,9 +909,9 @@ pub fn jle(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn jgt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	if (core.reg[.SR] == 2){
+	if (core.reg[rsr] == 2){
 		ip.* += off;
 		return true;
 	}
@@ -901,9 +920,9 @@ pub fn jgt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn jge(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	if (core.reg[.SR] > 1){
+	if (core.reg[rsr] > 1){
 		ip.* += off;
 		return true;
 	}
@@ -912,61 +931,61 @@ pub fn jge(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn call(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const off = (inst & 0xFFFF0000) >> 0x10;
-	core.reg[.SP] -= 8;
-	vm.memory.words[core.reg[.SP] >> 3] = core.reg[.IP]+1;
-	core.reg[.SP] -= 8;
-	vm.memory.words[core.reg[.SP] >> 3] = core.reg[.FP];
-	core.reg[.FP] = core.reg[.SP];
-	core.reg[.IP] += off;
+	core.reg[rsp] -= 8;
+	vm.memory.words[core.reg[rsp] >> 3] = core.reg[rip]+1;
+	core.reg[rsp] -= 8;
+	vm.memory.words[core.reg[rsp] >> 3] = core.reg[rfp];
+	core.reg[rfp] = core.reg[rsp];
+	core.reg[rip] += off;
 	return true;
 }
 
 pub fn ret_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const reg = (inst & 0xFF00) >> 0x8;
-	core.reg[.SP] = core.reg[.FP];
-	core.reg[.FP] = vm.memory.words[core.reg[.SP] >> 3];
-	core.reg[.SP] += 8;
-	core.reg[.IP] = vm.memory.words[core.reg[.SP] >> 3];
-	vm.memory.words[core.reg[.SP] >> 3] = core.reg[reg];
+	core.reg[rsp] = core.reg[rfp];
+	core.reg[rfp] = vm.memory.words[core.reg[rsp] >> 3];
+	core.reg[rsp] += 8;
+	core.reg[rip] = vm.memory.words[core.reg[rsp] >> 3];
+	vm.memory.words[core.reg[rsp] >> 3] = core.reg[reg];
 	return true;
 }
 
 pub fn ret_l(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const lit = (inst & 0xFF00) >> 0x8;
-	core.reg[.SP] = core.reg[.FP];
-	core.reg[.FP] = vm.memory.words[core.reg[.SP] >> 3];
-	core.reg[.SP] += 8;
-	core.reg[.IP] = vm.memory.words[core.reg[.SP] >> 3];
-	vm.memory.words[core.reg[.SP] >> 3] = lit;
+	core.reg[rsp] = core.reg[rfp];
+	core.reg[rfp] = vm.memory.words[core.reg[rsp] >> 3];
+	core.reg[rsp] += 8;
+	core.reg[rip] = vm.memory.words[core.reg[rsp] >> 3];
+	vm.memory.words[core.reg[rsp] >> 3] = lit;
 	return true;
 }
 
 pub fn psh_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const reg = (inst & 0xFF00) >> 0x8;
-	core.reg[.SP] = core.reg[.FP];
-	core.reg[.SP] -= 8;
-	vm.memory.words[core.reg[.SP] >> 3] = core.reg[reg];
+	core.reg[rsp] = core.reg[rfp];
+	core.reg[rsp] -= 8;
+	vm.memory.words[core.reg[rsp] >> 3] = core.reg[reg];
 	ip.* += 1;
 	return true;
 }
 
 pub fn pop_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip];
+	const inst = vm.memory.half_words[ip.*];
 	const reg = (inst & 0xFF00) >> 0x8;
-	core.reg[.SP] = core.reg[.FP];
-	core.reg[reg] = vm.memory.words[core.reg[.SP] >> 3];
-	core.reg[.SP] += 8;
+	core.reg[rsp] = core.reg[rfp];
+	core.reg[reg] = vm.memory.words[core.reg[rsp] >> 3];
+	core.reg[rsp] += 8;
 	ip.* += 1;
 	return true;
 }
 
 pub fn int(_: *VM, core: *Core, _: *align(1) u64) bool {
-	if (core.reg[.R0] == 0){
+	if (core.reg[r0] == 0){
 		return false;
 	}
 	return true;
@@ -1044,7 +1063,7 @@ const TOKEN = enum {
 
 const Token = struct {
 	text: []u8,
-	pos: u64
+	pos: u64,
 	tag: TOKEN,
 };
 
@@ -1054,55 +1073,55 @@ const Error = struct {
 };
 
 pub fn set_error(mem: *const std.mem.Allocator, buffer: *Buffer(Error), index: u64, comptime fmt: []const u8, args: anytype) void {
-	var error = Error{
+	var err = Error{
 		.pos = index,
 		.message = mem.alloc(u8, 128) catch unreachable
 	};
-	const result = std.fmt.bufPrint(err.message, fmt, args);
+	const result = std.fmt.bufPrint(err.message, fmt, args) catch unreachable;
 	err.message.len = result.len;
 	buffer.append(err)
 		catch unreachable;
 }
 
-pub fn tokenize(text: []u8, err: *Buffer(Error)) ParseError!Buffer(Token) {
-	const keywords = StringHashMap(TOKEN);
-	keywords.put("mov", MOV) catch unreachable;
-	keywords.put("add", ADD) catch unreachable;
-	keywords.put("sub", SUB) catch unreachable;
-	keywords.put("mul", MUL) catch unreachable;
-	keywords.put("div", DIV) catch unreachable;
-	keywords.put("mod", MOD) catch unreachable;
-	keywords.put("uadd", UADD) catch unreachable;
-	keywords.put("usub", USUB) catch unreachable;
-	keywords.put("umul", UMUL) catch unreachable;
-	keywords.put("udiv", UDIV) catch unreachable;
-	keywords.put("umod", UMOD) catch unreachable;
-	keywords.put("shr", SHR) catch unreachable;
-	keywords.put("shl", SHL) catch unreachable;
-	keywords.put("and", AND) catch unreachable;
-	keywords.put("or", OR) catch unreachable;
-	keywords.put("xor", XOR) catch unreachable;
-	keywords.put("not", NOT) catch unreachable;
-	keywords.put("com", COM) catch unreachable;
-	keywords.put("cmp", CMP) catch unreachable;
-	keywords.put("jmp", JMP) catch unreachable;
-	keywords.put("jeq", JEQ) catch unreachable;
-	keywords.put("jne", JNE) catch unreachable;
-	keywords.put("jgt", JGT) catch unreachable;
-	keywords.put("jlt", JLT) catch unreachable;
-	keywords.put("jge", JGE) catch unreachable;
-	keywords.put("jle", JLE) catch unreachable;
-	keywords.put("psh", PSH) catch unreachable;
-	keywords.put("pop", POP) catch unreachable;
-	keywords.put("call", CALL) catch unreachable;
-	keywords.put("ret", RET) catch unreachable;
-	keywords.put("int", INT) catch unreachable;
-	keywords.put("r0", REG0) catch unreachable;
-	keywords.put("r1", REG1) catch unreachable;
-	keywords.put("r2", REG2) catch unreachable;
-	keywords.put("r3", REG3) catch unreachable;
-	keywords.put("fp", REG_FP) catch unreachable;
-	keywords.put("sp", REG_SP) catch unreachable;
+pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) ParseError!Buffer(Token) {
+	var keywords = std.StringHashMap(TOKEN).init(mem.*);
+	keywords.put("mov", .MOV) catch unreachable;
+	keywords.put("add", .ADD) catch unreachable;
+	keywords.put("sub", .SUB) catch unreachable;
+	keywords.put("mul", .MUL) catch unreachable;
+	keywords.put("div", .DIV) catch unreachable;
+	keywords.put("mod", .MOD) catch unreachable;
+	keywords.put("uadd", .UADD) catch unreachable;
+	keywords.put("usub", .USUB) catch unreachable;
+	keywords.put("umul", .UMUL) catch unreachable;
+	keywords.put("udiv", .UDIV) catch unreachable;
+	keywords.put("umod", .UMOD) catch unreachable;
+	keywords.put("shr", .SHR) catch unreachable;
+	keywords.put("shl", .SHL) catch unreachable;
+	keywords.put("and", .AND) catch unreachable;
+	keywords.put("or", .OR) catch unreachable;
+	keywords.put("xor", .XOR) catch unreachable;
+	keywords.put("not", .NOT) catch unreachable;
+	keywords.put("com", .COM) catch unreachable;
+	keywords.put("cmp", .CMP) catch unreachable;
+	keywords.put("jmp", .JMP) catch unreachable;
+	keywords.put("jeq", .JEQ) catch unreachable;
+	keywords.put("jne", .JNE) catch unreachable;
+	keywords.put("jgt", .JGT) catch unreachable;
+	keywords.put("jlt", .JLT) catch unreachable;
+	keywords.put("jge", .JGE) catch unreachable;
+	keywords.put("jle", .JLE) catch unreachable;
+	keywords.put("psh", .PSH) catch unreachable;
+	keywords.put("pop", .POP) catch unreachable;
+	keywords.put("call", .CALL) catch unreachable;
+	keywords.put("ret", .RET) catch unreachable;
+	keywords.put("int", .INT) catch unreachable;
+	keywords.put("r0", .REG0) catch unreachable;
+	keywords.put("r1", .REG1) catch unreachable;
+	keywords.put("r2", .REG2) catch unreachable;
+	keywords.put("r3", .REG3) catch unreachable;
+	keywords.put("fp", .REG_FP) catch unreachable;
+	keywords.put("sp", .REG_SP) catch unreachable;
 	var i: u64 = 0;
 	var tokens = Buffer(Token).init(mem.*);
 	outer: while (i < text.len){
@@ -1134,12 +1153,12 @@ pub fn tokenize(text: []u8, err: *Buffer(Error)) ParseError!Buffer(Token) {
 			i += 1;
 			continue;
 		}
-		var start = i;
+		const start = i;
 		if (std.ascii.isAlphanumeric(c)){
 			while (std.ascii.isAlphanumeric(c)) {
 				i += 1;
 				if (i >= text.len){
-					break outer;
+					break :outer;
 				}
 				c = text[i];
 			}
@@ -1151,10 +1170,10 @@ pub fn tokenize(text: []u8, err: *Buffer(Error)) ParseError!Buffer(Token) {
 				}) catch unreachable;
 				continue;
 			}
-			const value = std.fmt.parseInt(i32, text[start .. i], 16) catch {
+			_ = std.fmt.parseInt(i32, text[start .. i], 16) catch {
 				set_error(mem, err, i, "Unexpected symbol in text stream where numeric was expected: {s}\n", .{text[start..i]});
 				return ParseError.UnexpectedToken;
-			}
+			};
 			tokens.append(Token{
 				.tag = .NUM,
 				.text=text[start .. i],
@@ -1176,7 +1195,7 @@ pub fn assert_infile(mem: *const std.mem.Allocator, tokens: []Token, i: *u64, er
 }
 
 pub fn parse_rarg(mem: *const std.mem.Allocator, tokens: []Token, i:*u64,  err: *Buffer(Error)) ParseError!RArg {
-	try assert_infile(mem, tokens, &i, err);
+	try assert_infile(mem, tokens, i, err);
 	const ropen = tokens[i.*];
 	if (ropen.tag == .OPEN){
 		i.* += 1;
@@ -1191,18 +1210,19 @@ pub fn parse_rarg(mem: *const std.mem.Allocator, tokens: []Token, i:*u64,  err: 
 		return RArg{
 			.dregister = dreg 
 		};
-		continue;
 	}
 	else if (ropen.tag == .LIT){
 		i.* += 1;
 		try assert_infile(mem, tokens, i, err);
 		const num = tokens[i.*];
 		i.* += 1;
-		const val = std.fmt.parseInt(i32, num.text, 16) catch unreachable;
+		const val = std.fmt.parseInt(u16, num.text, 16) catch {
+			set_error(mem, err, i.*, "Expected 2 byte unsigned value for right arg, found {s}\n", .{num.text});
+			return ParseError.UnexpectedToken;
+		};
 		return RArg{
 			.literal = val
 		};
-		continue;
 	}
 	const rreg = try parse_register(mem, tokens, i, err);
 	return RArg{
@@ -1303,21 +1323,33 @@ pub fn parse(mem: *const std.mem.Allocator, tokens: []Token, err: *Buffer(Error)
 				try assert_infile(mem, tokens, &i, err);
 				const num = tokens[i];
 				i += 1;
-				const val = std.fmt.parseInt(i32, num.text, 16) catch unreachable;
+				const val = std.fmt.parseInt(u16, num.text, 16) catch {
+					set_error(mem, err, i, "Expected 2 byte literal, found {s}\n", .{num.text});
+					return ParseError.UnexpectedToken;
+				};
 				instructions.append(Instruction{
-					.jump=val
+					.tag=tok.tag,
+					.data= .{
+						.jump=val
+					}
 				}) catch unreachable;
 			},
 			.PSH => {
 				const reg = try parse_register(mem, tokens, &i, err);
 				instructions.append(Instruction{
-					.push = reg
+					.tag=tok.tag,
+					.data= .{
+						.push = reg
+					}
 				}) catch unreachable;
 			},
 			.POP => {
 				const reg = try parse_register(mem, tokens, &i, err);
 				instructions.append(Instruction{
-					.pop = reg
+					.tag=tok.tag,
+					.data= .{
+						.pop = reg
+					}
 				}) catch unreachable;
 			},
 			.CALL => {
@@ -1325,31 +1357,48 @@ pub fn parse(mem: *const std.mem.Allocator, tokens: []Token, err: *Buffer(Error)
 				try assert_infile(mem, tokens, &i, err);
 				const num = tokens[i];
 				i += 1;
-				const val = std.fmt.parseInt(i32, num.text, 16) catch unreachable;
+				const val = std.fmt.parseInt(u16, num.text, 16) catch {
+					set_error(mem, err, i, "Expected 2 byte literal, found {s}\n", .{num.text});
+					return ParseError.UnexpectedToken;
+				};
 				instructions.append(Instruction{
-					.call=val
+					.tag=tok.tag,
+					.data= .{
+						.call=val
+					}
 				}) catch unreachable;
 			},
 			.RET => {
 				const arg = try parse_alu_arg(mem, tokens, &i, err);
 				instructions.append(Instruction{
-					.ret = arg
+					.tag=tok.tag,
+					.data= .{
+						.ret = arg
+					}
 				}) catch unreachable;
 			},
 			.INT => {
 				instructions.append(Instruction{
-					.interrupt = .{}
+					.tag=tok.tag,
+					.data= .{
+						.interrupt = undefined
+					}
 				}) catch unreachable;
+			},
+			else => {
+				set_error(mem, err, i, "Unexpected token in stream, expected opcode, found {s}", .{tok.text});
+				return ParseError.UnexpectedToken;
 			}
 		}
 	}
+	return instructions;
 }
 
-pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: Buffer(Instruction)) ParseError![]u8 {
-	
+pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruction, err: *Buffer(Error)) ParseError![]u8 {
+	//TODO
 }
 
-pub fn parse_alu_arg(mem: *const std.mem.Allocator, tokens: Buffer(Token), i: *u64, err: *Buffer(Error)) ParseError!ALUArg{
+pub fn parse_alu_arg(mem: *const std.mem.Allocator, tokens: []Token, i: *u64, err: *Buffer(Error)) ParseError!ALUArg{
 	try assert_infile(mem, tokens, i, err);
 	const token = tokens[i.*];
 	if (token.tag == .LIT){
@@ -1357,7 +1406,10 @@ pub fn parse_alu_arg(mem: *const std.mem.Allocator, tokens: Buffer(Token), i: *u
 		try assert_infile(mem, tokens, i, err);
 		const num = tokens[i.*];
 		i.* += 1;
-		const val = std.fmt.parseInt(i32, num.text, 16);
+		const val = std.fmt.parseInt(u8, num.text, 16) catch {
+			set_error(mem, err, i.*, "Expected unsigned byte for argument, found {s}\n", .{num.text});
+			return ParseError.UnexpectedToken;
+		};
 		return ALUArg{
 			.literal = val
 		};
@@ -1368,7 +1420,7 @@ pub fn parse_alu_arg(mem: *const std.mem.Allocator, tokens: Buffer(Token), i: *u
 	};
 }
 
-pub fn parse_register(mem: *const std.mem.Allocator, tokens: Buffer(Token), i: *u64, err: *Buffer(Error)) ParseError!Register {
+pub fn parse_register(mem: *const std.mem.Allocator, tokens: []Token, i: *u64, err: *Buffer(Error)) ParseError!Register {
 	try assert_infile(mem, tokens, i, err);
 	const r = tokens[i.*];
 	i.* += 1;
@@ -1392,7 +1444,7 @@ pub fn parse_register(mem: *const std.mem.Allocator, tokens: Buffer(Token), i: *
 			return .SP;
 		},
 		else => {
-			set_error(mem, err, i.*, "Expected register, found {s}\n", .{t.text});
+			set_error(mem, err, i.*, "Expected register, found {s}\n", .{r.text});
 			return ParseError.UnexpectedToken;
 		}
 	}
@@ -1467,8 +1519,8 @@ pub fn main() !void {
 		.mem_size = 0x100000,
 		.mem = allocator
 	};
-	const vm = VM.init(default_config);
-	var infile = std.fs.cwd().openFile("test.bit") catch {
+	var vm = VM.init(default_config);
+	var infile = std.fs.cwd().openFile("test.bit", .{}) catch {
 		std.debug.print("File not founhd {s}\n", .{"test.bit"});
 		return;
 	};
@@ -1482,23 +1534,27 @@ pub fn main() !void {
 		return;
 	};
 	defer allocator.free(contents);
-	const err = Buffer(Error).init(allocator);
+	var err = Buffer(Error).init(allocator);
 	const tokens = tokenize(&allocator, contents, &err) catch {
 		for (err.items) |e| {
 			show_error(contents, e);
 		}
+		return;
 	};
-	const instructions = parse(&allocator, tokens, &err) catch {
+	const instructions = parse(&allocator, tokens.items, &err) catch {
 		for (err.items) |e| {
 			show_error(contents, e);
 		}
-	}
-	const bytecode = assemble_bytecode(&allocat or, instructions, &err) catch {
+		return;
+	};
+	const bytecode = assemble_bytecode(&allocator, instructions.items, &err) catch {
 		for (err.items) |e| {
 			show_error(contents, e);
 		}
+		return;
 	};
 	vm.load_bytes(0, bytecode);
+	_ = vm.interpret(0, 0);
 }
 
 
