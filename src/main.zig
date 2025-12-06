@@ -1126,6 +1126,10 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 	var tokens = Buffer(Token).init(mem.*);
 	outer: while (i < text.len){
 		var c = text[i];
+		if (c == ' ' or c == '\n' or c == '\t'){
+			i += 1;
+			continue;
+		}
 		if (c == '!'){
 			tokens.append(Token{
 				.tag=.LIT,
@@ -1181,7 +1185,7 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 			}) catch unreachable;
 			continue;
 		}
-		set_error(mem, err, i, "Unexpected symbol in text stream: {}\n", .{c});
+		set_error(mem, err, i, "Unexpected symbol in text stream: {c}\n", .{c});
 		return ParseError.UnexpectedToken;
 	}
 	return tokens;
@@ -1427,7 +1431,7 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 						continue;
 					}
 					if (inst.data.move.src == .dregister){
-						bytes[byte] = 0;
+						bytes[byte] = 2;
 						byte += 1;
 						bytes[byte] = 0;
 						byte += 1;
@@ -1440,7 +1444,7 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 				}
 				else if (inst.data.move.dest == .dregister) {
 					if (inst.data.move.src == .register){
-						bytes[byte] = 0;
+						bytes[byte] = 3;
 						byte += 1;
 						bytes[byte] = 0;
 						byte += 1;
@@ -1451,7 +1455,7 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 						continue;
 					}
 					if (inst.data.move.src == .literal){
-						bytes[byte] = 1;
+						bytes[byte] = 4;
 						byte += 1;
 						bytes[byte] = @truncate(@intFromEnum(inst.data.move.dest.dregister));
 						byte += 1;
@@ -1462,7 +1466,7 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 						continue;
 					}
 					if (inst.data.move.src == .dregister){
-						bytes[byte] = 0;
+						bytes[byte] = 5;
 						byte += 1;
 						bytes[byte] = 0;
 						byte += 1;
@@ -1552,9 +1556,8 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 				continue;
 			},
 			.CMP => {
-				const seed:u8 = 69;
 				if (inst.data.compare.right == .register){
-					bytes[byte] = seed+0;
+					bytes[byte] = 76;
 					byte += 1;
 					bytes[byte] = 0;
 					byte += 1;
@@ -1564,7 +1567,7 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 					byte += 1;
 				}
 				else if (inst.data.compare.right == .literal){
-					bytes[byte] = seed+1;
+					bytes[byte] = 77;
 					byte += 1;
 					bytes[byte] = 0;
 					byte += 1;
@@ -1576,7 +1579,7 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 				continue;
 			},
 			.JMP, .JEQ, .JNE, .JGT, .JGE, .JLT, .JLE => {
-				bytes[byte] = @truncate(70+(@intFromEnum(inst.tag)-19));
+				bytes[byte] = 78;
 				byte += 1;
 				bytes[byte] = 0;
 				byte += 1;
@@ -1587,7 +1590,7 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 				continue;
 			},
 			.CALL => {
-				bytes[byte] = 72;
+				bytes[byte] = 79;
 				byte += 1;
 				bytes[byte] = 0;
 				byte += 1;
@@ -1598,15 +1601,14 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 				continue;
 			},
 			.RET => {
-				const seed = 73;
 				if (inst.data.ret == .register){
-					bytes[byte] = seed+0;
+					bytes[byte] = 80;
 					byte += 1;
 					bytes[byte] = @truncate(@intFromEnum(inst.data.ret.register));
 					byte += 3;
 				}
 				else if (inst.data.ret == .literal){
-					bytes[byte] = seed+1;
+					bytes[byte] = 81;
 					byte += 1;
 					bytes[byte] = @truncate(inst.data.ret.literal);
 					byte += 3;
@@ -1614,21 +1616,21 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 				continue;
 			},
 			.PSH => {
-				bytes[byte] = 75;
+				bytes[byte] = 82;
 				byte += 1;
 				bytes[byte] = @truncate(@intFromEnum(inst.data.push));
 				byte += 3;
 				continue;
 			},
 			.POP => {
-				bytes[byte] = 76;
+				bytes[byte] = 83;
 				byte += 1;
 				bytes[byte] = @truncate(@intFromEnum(inst.data.push));
 				byte += 3;
 				continue;
 			},
 			.INT => {
-				bytes[byte] = 77;
+				bytes[byte] = 84;
 				byte += 4;
 				continue;
 			},
@@ -1753,6 +1755,18 @@ pub fn show_error(text: []u8, err: Error) void {
 		catch unreachable;
 }
 
+pub fn show_bytecode(bytes: []u8) void {
+	for (0 .. bytes.len/4) |i| {
+		const index = i * 4;
+		std.debug.print("{x:02} {x:02} {x:02} {x:02}\n", .{
+			bytes[index],
+			bytes[index+1],
+			bytes[index+2],
+			bytes[index+3]
+		});
+	}
+}
+
 pub fn main() !void {
 	const allocator = std.heap.page_allocator;
 	const default_config = Config {
@@ -1764,7 +1778,7 @@ pub fn main() !void {
 	};
 	var vm = VM.init(default_config);
 	var infile = std.fs.cwd().openFile("test.bit", .{}) catch {
-		std.debug.print("File not founhd {s}\n", .{"test.bit"});
+		std.debug.print("File not found {s}\n", .{"test.bit"});
 		return;
 	};
 	defer infile.close();
@@ -1796,15 +1810,13 @@ pub fn main() !void {
 		}
 		return;
 	};
+	show_bytecode(bytecode);
 	vm.load_bytes(0, bytecode);
 	_ = vm.interpret(0, 0);
 }
 
-
 //TODO CLI
-//TODO parser
-//TODO assembler
 //TODO decoder
 //TODO debugger
 //TODO distinction between signed and unsigned math
-//TODO make offset jumps signed
+//TODO make offset jumps signed in the interpreter portion
