@@ -1041,8 +1041,8 @@ const Instruction = struct {
 	}
 };
 
-const TOKEN = enum {
-	MOV,
+const TOKEN = enum(u64) {
+	MOV=0,
 	ADD, SUB, MUL, DIV, MOD,
 	UADD, USUB, UMUL, UDIV, UMOD,
 	SHR, SHL,
@@ -1395,7 +1395,250 @@ pub fn parse(mem: *const std.mem.Allocator, tokens: []Token, err: *Buffer(Error)
 }
 
 pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruction, err: *Buffer(Error)) ParseError![]u8 {
-	//TODO
+	var i: u64 = 0;
+	var bytes = mem.alloc(u8, instructions.len*4) catch unreachable;
+	var byte: u64 = 0;
+	while (i < instructions.len){
+		const inst = instructions[i];
+		i += 1;
+		switch (inst.tag){
+			.MOV => {
+				if (inst.data.move.dest == .register){
+					if (inst.data.move.src == .register){
+						bytes[byte] = 0;
+						byte += 1;
+						bytes[byte] = 0;
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.move.dest.register));
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.move.src.register));
+						byte += 1;
+						continue;
+					}
+					if (inst.data.move.src == .literal){
+						bytes[byte] = 1;
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.move.dest.register));
+						byte += 1;
+						bytes[byte] = @truncate((inst.data.move.src.literal & 0xFF00) >> 0x8);
+						byte += 1;
+						bytes[byte] = @truncate((inst.data.move.src.literal) & 0xFF);
+						byte += 1;
+						continue;
+					}
+					if (inst.data.move.src == .dregister){
+						bytes[byte] = 0;
+						byte += 1;
+						bytes[byte] = 0;
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.move.dest.register));
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.move.src.dregister));
+						byte += 1;
+						continue;
+					}
+				}
+				else if (inst.data.move.dest == .dregister) {
+					if (inst.data.move.src == .register){
+						bytes[byte] = 0;
+						byte += 1;
+						bytes[byte] = 0;
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.move.dest.dregister));
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.move.src.register));
+						byte += 1;
+						continue;
+					}
+					if (inst.data.move.src == .literal){
+						bytes[byte] = 1;
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.move.dest.dregister));
+						byte += 1;
+						bytes[byte] = @truncate((inst.data.move.src.literal & 0xFF00) >> 0x8);
+						byte += 1;
+						bytes[byte] = @truncate((inst.data.move.src.literal) & 0xFF);
+						byte += 1;
+						continue;
+					}
+					if (inst.data.move.src == .dregister){
+						bytes[byte] = 0;
+						byte += 1;
+						bytes[byte] = 0;
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.move.dest.dregister));
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.move.src.dregister));
+						byte += 1;
+						continue;
+					}
+				}
+				unreachable;
+			},
+			.ADD, .SUB, .MUL, .DIV,
+			.UADD, .USUB, .UMUL, .UDIV,
+		  	.SHR, .SHL, .AND, .OR, .XOR  => {
+				const seed:u8 = @truncate(6+((@intFromEnum(inst.tag)-1)*4));
+				if (inst.data.alu_bin.left == .register){
+					if (inst.data.alu_bin.right == .register){
+						bytes[byte] = seed+0;
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.alu_bin.dest));
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.alu_bin.left.register));
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.alu_bin.right.register));
+						byte += 1;
+					}
+					else if (inst.data.alu_bin.right == .literal){
+						bytes[byte] = seed+1;
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.alu_bin.dest));
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.alu_bin.left.register));
+						byte += 1;
+						bytes[byte] = inst.data.alu_bin.right.literal;
+						byte += 1;
+					}
+					continue;
+				}
+				else if (inst.data.alu_bin.left == .literal){
+					if (inst.data.alu_bin.right == .register){
+						bytes[byte] = seed+2;
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.alu_bin.dest));
+						byte += 1;
+						bytes[byte] = inst.data.alu_bin.left.literal;
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.alu_bin.right.register));
+						byte += 1;
+					}
+					else if (inst.data.alu_bin.right == .literal){
+						bytes[byte] = seed+3;
+						byte += 1;
+						bytes[byte] = @truncate(@intFromEnum(inst.data.alu_bin.dest));
+						byte += 1;
+						bytes[byte] = inst.data.alu_bin.left.literal;
+						byte += 1;
+						bytes[byte] = inst.data.alu_bin.right.literal;
+						byte += 1;
+					}
+					continue;
+				}
+				unreachable;
+			},
+			.NOT, .COM => {
+				const seed = 64+((@intFromEnum(inst.tag)-16)*2);
+				if (inst.data.alu_un.src == .register){
+					bytes[byte] = @truncate(seed);
+					byte += 1;
+					bytes[byte] = 0;
+					byte += 1;
+					bytes[byte] = @truncate(@intFromEnum(inst.data.alu_un.dest));
+					byte += 1;
+					bytes[byte] = @truncate(@intFromEnum(inst.data.alu_un.src.register));
+					byte += 1;
+				}
+				else if (inst.data.alu_un.src == .literal){
+					bytes[byte] = @truncate(seed+1);
+					byte += 1;
+					bytes[byte] = 0;
+					byte += 1;
+					bytes[byte] = @truncate(@intFromEnum(inst.data.alu_un.dest));
+					byte += 1;
+					bytes[byte] = @truncate(inst.data.alu_un.src.literal);
+					byte += 1;
+				}
+				continue;
+			},
+			.CMP => {
+				const seed:u8 = 69;
+				if (inst.data.compare.right == .register){
+					bytes[byte] = seed+0;
+					byte += 1;
+					bytes[byte] = 0;
+					byte += 1;
+					bytes[byte] = @truncate(@intFromEnum(inst.data.compare.left));
+					byte += 1;
+					bytes[byte] = @truncate(@intFromEnum(inst.data.compare.right.register));
+					byte += 1;
+				}
+				else if (inst.data.compare.right == .literal){
+					bytes[byte] = seed+1;
+					byte += 1;
+					bytes[byte] = 0;
+					byte += 1;
+					bytes[byte] = @truncate(@intFromEnum(inst.data.compare.left));
+					byte += 1;
+					bytes[byte] = @truncate(inst.data.compare.right.literal);
+					byte += 1;
+				}
+				continue;
+			},
+			.JMP, .JEQ, .JNE, .JGT, .JGE, .JLT, .JLE => {
+				bytes[byte] = @truncate(70+(@intFromEnum(inst.tag)-19));
+				byte += 1;
+				bytes[byte] = 0;
+				byte += 1;
+				bytes[byte] = @truncate(inst.data.jump & 0xFF);
+				byte += 1;
+				bytes[byte] = @truncate((inst.data.jump >> 0x8) & 0xFF);
+				byte += 1;
+				continue;
+			},
+			.CALL => {
+				bytes[byte] = 72;
+				byte += 1;
+				bytes[byte] = 0;
+				byte += 1;
+				bytes[byte] = @truncate(inst.data.call & 0xFF);
+				byte += 1;
+				bytes[byte] = @truncate((inst.data.call >> 0x8) & 0xFF);
+				byte += 1;
+				continue;
+			},
+			.RET => {
+				const seed = 73;
+				if (inst.data.ret == .register){
+					bytes[byte] = seed+0;
+					byte += 1;
+					bytes[byte] = @truncate(@intFromEnum(inst.data.ret.register));
+					byte += 3;
+				}
+				else if (inst.data.ret == .literal){
+					bytes[byte] = seed+1;
+					byte += 1;
+					bytes[byte] = @truncate(inst.data.ret.literal);
+					byte += 3;
+				}
+				continue;
+			},
+			.PSH => {
+				bytes[byte] = 75;
+				byte += 1;
+				bytes[byte] = @truncate(@intFromEnum(inst.data.push));
+				byte += 3;
+				continue;
+			},
+			.POP => {
+				bytes[byte] = 76;
+				byte += 1;
+				bytes[byte] = @truncate(@intFromEnum(inst.data.push));
+				byte += 3;
+				continue;
+			},
+			.INT => {
+				bytes[byte] = 77;
+				byte += 4;
+				continue;
+			},
+			else => {
+				set_error(mem, err, i, "Unknown opcode {}\n", .{inst.tag});
+				return ParseError.UnexpectedToken;
+			}
+		}
+	}
+	return bytes;
 }
 
 pub fn parse_alu_arg(mem: *const std.mem.Allocator, tokens: []Token, i: *u64, err: *Buffer(Error)) ParseError!ALUArg{
