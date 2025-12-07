@@ -1,6 +1,8 @@
 const std = @import("std");
 const Buffer = std.ArrayList;
 
+const debug = true;
+
 const Config = struct {
 	screen_width: u64,
 	screen_height: u64,
@@ -28,6 +30,8 @@ const rip = 4;
 const rsr = 5;
 const rsp = 6;
 const rfp = 7;
+var kill_cores = false;
+threadlocal var active_core: u64 = 0;
 
 const Core = struct {
 	reg: [8]u64,
@@ -62,14 +66,77 @@ const Memory = struct {
 
 const Operation = *const fn (*VM, *Core, *align(1) u64) bool;
 
+const ContextError = error {
+	NoCore
+};
+
+const Context = struct {
+	threads: []std.Thread,
+	mutex: std.Thread.Mutex,
+	running: u64, // atomic
+	vm: *VM,
+	
+	pub fn init(config: Config, vm: *VM) Context {
+		var context = Context {
+			.threads = config.mem.alloc(std.Thread, vm.cores.len) catch unreachable,
+			.mutex = std.Thread.Mutex{},
+			.running = 0,
+			.vm=vm
+		};
+		for (0..vm.cores.len) |i| {
+			context.threads[i] = std.Thread.spawn(.{}, core_worker, .{vm, i})
+				catch unreachable;
+		}
+		return context;
+	}
+
+	pub fn deinit(self: *Context) void {
+		kill_cores = true;
+		for (0..self.threads.len) |i| {
+			self.threads[i].join();
+		}
+	}
+
+	pub fn awaken_core(self: *Context, start_ip: u64) ContextError!u64 {
+		self.mutex.lock();
+		defer self.mutex.unlock();
+		for (0..self.threads.len) |core| {
+			if (self.vm.cores[core].reg[rip] == 0){
+				self.vm.cores[core].reg[rip] = start_ip;
+				_ = @atomicRmw(u64, &self.running, .Add, 1, .seq_cst);
+				if (debug){
+					std.debug.print("awakeded {}\n", .{core});
+				}
+				return core;
+			}
+		}
+		return ContextError.NoCore;
+	}
+
+	pub fn sleep_core(self: *Context) void {
+		self.mutex.lock();
+		defer self.mutex.unlock();
+		self.vm.cores[active_core].reg[rip] = 0;
+		_ = @atomicRmw(u64, &self.running, .Sub, 1, .seq_cst);
+	}
+
+	pub fn await_cores(self: *Context) void {
+		while (@atomicLoad(u64, &self.running, .seq_cst) != 0){
+			std.time.sleep(1_000_000); // 1ms
+		}
+	}
+};
+
 const VM = struct {
 	cores: []Core,
 	memory: Memory,
+	context: ?*Context,
 
 	pub fn init(config: Config) VM {
 		var vm = VM{
 			.cores = config.mem.alloc(Core, config.cores) catch unreachable,
-			.memory = Memory.init(config)
+			.memory = Memory.init(config),
+			.context = null
 		};
 		for (0..config.cores) |i| {
 			vm.cores[i] = Core.init();
@@ -122,6 +189,20 @@ const VM = struct {
 		}
 	}
 };
+
+pub fn core_worker(vm: *VM, thread_index: u64) void {
+	active_core = thread_index;
+	while (!kill_cores){
+		if (vm.memory.words.len == 0){
+			continue;
+		}
+		if (vm.cores[active_core].reg[rip] == 0){
+			std.time.sleep(1_000_000); // 1ms
+			continue;
+		}
+		vm.interpret(active_core, vm.cores[active_core].reg[rip]);
+	}
+}
 
 pub fn mov_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip.*];
@@ -984,8 +1065,14 @@ pub fn pop_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	return true;
 }
 
-pub fn int(_: *VM, core: *Core, _: *align(1) u64) bool {
+pub fn int(vm: *VM, core: *Core, _: *align(1) u64) bool {
 	if (core.reg[r0] == 0){
+		if (vm.context) |context| {
+			context.sleep_core();
+		}
+		if (debug){
+			std.debug.print("terminating {}\n", .{active_core});
+		}
 		return false;
 	}
 	return true;
@@ -1776,7 +1863,6 @@ pub fn main() !void {
 		.mem_size = 0x100000,
 		.mem = allocator
 	};
-	var vm = VM.init(default_config);
 	var infile = std.fs.cwd().openFile("test.bit", .{}) catch {
 		std.debug.print("File not found {s}\n", .{"test.bit"});
 		return;
@@ -1811,11 +1897,23 @@ pub fn main() !void {
 		return;
 	};
 	show_bytecode(bytecode);
-	vm.load_bytes(0, bytecode);
-	_ = vm.interpret(0, 0);
+	with(default_config, bytecode, 0x200);
 }
 
-//TODO CLI
+pub fn with(config:Config, bytecode: []u8, start: u64) void {
+	var vm = VM.init(config);
+	vm.load_bytes(start, bytecode);
+	var context = Context.init(config, &vm);
+	vm.context = &context;
+	_ = context.awaken_core(start>>2) catch {
+		std.debug.print("Corrupted VM state\n", .{});
+		context.deinit();
+	};
+	context.await_cores();
+	context.deinit();
+}
+
+//TODO multicore
 //TODO decoder
 //TODO debugger
 //TODO distinction between signed and unsigned math
