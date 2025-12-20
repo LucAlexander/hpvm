@@ -1913,8 +1913,5 @@ pub fn with(config:Config, bytecode: []u8, start: u64) void {
 	context.deinit();
 }
 
-//TODO multicore
 //TODO decoder
 //TODO debugger
-//TODO distinction between signed and unsigned math
-//TODO make offset jumps signed in the interpreter portion
